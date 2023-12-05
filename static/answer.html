@@ -12,32 +12,35 @@
 </head>
 <body>
     <div class="container">
-    <h1> Video Chat Application </h1>
-    <button onclick="startWebcam()">Start Webcam</button>
-    <br>
-    <br>
-    <div class="row">
-        <div class="col-sm">
-            <video id="webcam" autoplay></video>
+        <h1>Video Chat Application</h1>
+        <button onclick="startWebcam()">Start Webcam</button>
+        <br>
+        <br>
+        <div class="row">
+            <div class="col-sm-4">
+                <video id="webcam" autoplay style="width: 100%;"></video>
+            </div>
+            <div class="col-sm-4" style="display: none;">
+                <h2>SDP Offer</h2>
+                <textarea id="freeform" name="freeform" rows="10" cols="30"></textarea>
+            </div>
+            <div class="col-sm-4">
+                <h2>SDP Answer</h2>
+                <textarea id="answerForm" name="answerForm" rows="10" cols="30"></textarea>
+                <button onclick="startConnection()">Make Connection</button>
+            </div>
         </div>
-        <div class="col-sm">
-            <h2>SDP Offer</h2>
-            <textarea id="freeform" name="freeform" rows="25" cols="50"></textarea>
-        </div>
-        <div class="col-sm">
-            <h2>SDP Answer</h2>
-            <textarea id="answerForm" name="answerForm" rows="25" cols="50"></textarea>
-            <button onclick="startConnection()">Make Connection</button>
-        </div>
-        <div class="col-sm">
-            <h2>SDP Answer 2</h2>
-            <textarea id="answerForm2" name="answerForm2" rows="25" cols="50"></textarea>
-        </div>
-        <div class="col-sm">
-            <video id="client" autoplay></video> 
+        <div class="row">
+            <div class="col-sm-4">
+                <h2>SDP Answer 2</h2>
+                <textarea id="answerForm2" name="answerForm2" rows="10" cols="30"></textarea>
+            </div>
+            <div class="col-sm-4">
+                <video id="client" autoplay style="width: 100%;"></video>
+            </div>
         </div>
     </div>
-    </div>
+    
 
     <script src="/js/answer"></script>
 </body>

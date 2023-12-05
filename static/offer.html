@@ -1,38 +1,42 @@
 <!DOCTYPE html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        video{
+        video {
             transform: scaleX(-1);
         }
     </style>
-     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-
-     <!-- Bootstrap JS bundle (includes Popper.js) -->
-     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <!-- Bootstrap JS bundle (includes Popper.js) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </head>
 <body>
     <div class="container">
-    <h1> Video Chat Application </h1>
-    <button onclick="startWebcam()">Start Webcam</button>
-    <br>
-    <br>
-    <div class="row">
-        <div class="col-sm">
-            <video id="webcam" autoplay></video>
+        <h1>Video Chat Application</h1>
+        <button onclick="startWebcam()">Start Webcam</button>
+        <br>
+        <br>
+        <div class="row">
+            <div class="col-sm-6">
+                <video id="webcam" autoplay style="width: 100%;"></video>
+            </div>
+            <div class="col-sm-6">
+                <h2>SDP Offer</h2>
+                <textarea id="freeform" name="freeform" rows="10" cols="30"></textarea>
+            </div>
         </div>
-        <div class="col-sm">
-            <h2>SDP Offer</h2>
-            <textarea id="freeform" name="freeform" rows="25" cols="50"></textarea>
+        <div class="row">
+            <div class="col-sm-6">
+                <h2>SDP Answer</h2>
+                <textarea id="answerForm" name="answerForm" rows="10" cols="30"></textarea>
+                <button onclick="startConnection()">Make Connection</button>
+            </div>
+            <div class="col-sm-6">
+                <video id="client" autoplay style="width: 100%;"></video>
+            </div>
         </div>
-        <div class="col-sm">
-            <h2>SDP Answer</h2>
-            <textarea id="answerForm" name="answerForm" rows="25" cols="50"></textarea>
-            <button onclick="startConnection()">Make Connection</button>
-        </div>
-        <div class="col-sm">
-            <video id="client" autoplay></video> 
-        </div>
-    </div>
     </div>
 
     <script src="/js/offer"></script>
