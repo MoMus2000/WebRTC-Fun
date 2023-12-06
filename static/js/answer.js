@@ -1,6 +1,15 @@
 
 let peerConnection = new RTCPeerConnection()
 
+const socket = new WebSocket("ws://localhost:3000/answer/ws")
+socket.addEventListener('open', async function(event){
+    console.log("Connection Establised")
+})
+socket.addEventListener('message', async function(event){
+    await startWebcam()
+    await startConnection(event.data)
+})
+
 peerConnection.ontrack = function (event) {
         const el = document.getElementById('client')
         console.log(event)
@@ -37,8 +46,8 @@ async function startWebcam(){
     }
 }
 
-async function startConnection(){
-    let encryptedAnswer = document.getElementById("answerForm").value
+async function startConnection(encryptedAnswer){
+    // let encryptedAnswer = document.getElementById("answerForm").value
     // console.log(JSON.parse(atob(encryptedAnswer)))
     // await peerConnection.setRemoteDescription(JSON.parse(atob(encryptedAnswer)))
     // console.log("Connection successful")
@@ -54,6 +63,7 @@ async function startConnection(){
         if(event.candidate){
             console.log('Adding answer candidate...:', event.candidate)
             document.getElementById('answerForm2').value = btoa(JSON.stringify(peerConnection.localDescription))
+            socket.send(btoa(JSON.stringify(peerConnection.localDescription)))
         }
     };
 

@@ -1,5 +1,13 @@
 let peerConnection = new RTCPeerConnection()
 
+const socket = new WebSocket("ws://localhost:3000/offer/ws")
+socket.addEventListener('open', function(event){
+    console.log("Connection Establised")
+})
+socket.addEventListener('message', async function(event){
+    await startConnection(event.data)
+})
+
 peerConnection.ontrack = (event) => {
     event.streams[0].getTracks().forEach((track) => {
     const el = document.getElementById('client')
@@ -32,14 +40,15 @@ async function startWebcam(){
 
         const freeform = document.getElementById("freeform")
         freeform.innerHTML = encryptedOffer
+        socket.send(encryptedOffer)
     }
     catch (error){
         console.log("Error accessing the webcam", error)
     }
 }
 
-async function startConnection(){
-    let encryptedAnswer = document.getElementById("answerForm").value
+async function startConnection(encryptedAnswer){
+    // let encryptedAnswer = document.getElementById("answerForm").value
     console.log(JSON.parse(atob(encryptedAnswer)))
     await peerConnection.setRemoteDescription(JSON.parse(atob(encryptedAnswer)))
     console.log("Connection successful")
