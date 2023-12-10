@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WebRTC working example</title>
+    <style>
+        body, html {
+        height: 100%;
+        margin: 0;
+        }
+
+        #remoteStream {
+        width: 100%;
+        height: 100%;
+        position: absolute;
+	transform: scaleX(-1);
+        }
+
+        #localStream {
+        width: 25vh;
+        height: 25vh;
+        margin: 1em;
+        bottom: 0;
+        right: 0;
+        position: absolute;
+	transform: scaleX(-1);
+        }
+
+        #toggleMic {
+        width: 4vh;
+        height: 4vh;
+        margin: 1em;
+        bottom: 0;
+        right: 0;
+        position: absolute;
+        }
+
+        #toggleMic.muted {
+        color: red;
+        }
+    </style>
+</head>
+<body>
+    <video id="remoteStream" autoplay playsinline></video>
+    <video id="localStream" autoplay playsinline></video>
+    <button id="toggleMic" type="button" alt="Toggle mic status" class="muted" onclick="toggleMic()">Mic</button>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js" integrity="sha384-mZLF4UVrpi/QTWPA7BjNPEnkIfRFn4ZEO3Qt/HFklTJBj/gBOV8G3HcKn4NfQblz" crossorigin="anonymous"></script>
+    <script>
+        // // Config variables: change them to point to your own servers
+        const SIGNALING_SERVER_URL = 'http://localhost:9999';
+        const TURN_SERVER_URL = '';
+        const TURN_SERVER_USERNAME = '';
+        const TURN_SERVER_CREDENTIAL = '';
+        // WebRTC config: you don't have to change this for the example to work
+        // If you are testing on localhost, you can just use PC_CONFIG = {}
+        const PC_CONFIG = {
+        iceServers: [
+	    { urls: 'stun:stun.l.google.com:19302' },
+            // {
+            // urls: 'turn:' + TURN_SERVER_URL + '?transport=tcp',
+            // username: TURN_SERVER_USERNAME,
+            // credential: TURN_SERVER_CREDENTIAL
+            // },
+            // {
+            // urls: 'turn:' + TURN_SERVER_URL + '?transport=udp',
+            // username: TURN_SERVER_USERNAME,
+            // credential: TURN_SERVER_CREDENTIAL
+            // }
+        ]
+        };
+
+        // Signaling methods
+
+        let ws = null
+        let sendData = null
+
+        function startWebSocket(){
+            let socket = new WebSocket("ws://localhost:9999/ws") 
+            socket.addEventListener("open", (event)=>{
+            ws = socket
+            sendData = (data) => {
+                console.log(data.type)
+                ws.send(JSON.stringify(data))
+            };
+            })
+
+            socket.addEventListener("message", (event)=>{
+            let eventDataMap = JSON.parse(event.data)
+            console.log(eventDataMap)
+            switch(eventDataMap.Action){
+                case "data":
+                    handleSignalingData(eventDataMap);
+                    break
+                case "ready":
+                    // // Connection with signaling server is ready, and so is local stream
+                    createPeerConnection();
+                    sendOffer();
+            }
+        })
+        }
+
+        
+
+        // // WebRTC methods
+        let pc;
+        let localStream;
+        let remoteStreamElement = document.querySelector('#remoteStream');
+        let localStreamElement = document.querySelector('#localStream');
+
+        let getLocalStream = () => {
+        navigator.mediaDevices.getUserMedia({ audio: true, video: true })
+            .then((stream) => {
+            console.log('Stream found');
+            localStream = stream;
+            // Disable the microphone by default
+            stream.getAudioTracks()[0].enabled = false;
+            localStreamElement.srcObject = localStream;
+            // Connect after making sure that local stream is availble
+            // TODO: Follow this convention
+            startWebSocket()
+            })
+            .catch(error => {
+            console.error('Stream not found: ', error);
+            });
+        }
+
+        let createPeerConnection = () => {
+        try {
+            pc = new RTCPeerConnection(PC_CONFIG);
+            pc.onicecandidate = onIceCandidate;
+            pc.ontrack = onTrack;
+            pc.addStream(localStream);
+            console.log('PeerConnection created');
+        } catch (error) {
+            console.error('PeerConnection failed: ', error);
+        }
+        };
+
+        let sendOffer = () => {
+        console.log('Send offer');
+        pc.createOffer().then(
+            (offer)=>{
+                console.log("Generated offer: ", offer)
+                setAndSendLocalDescription(offer)
+            },
+            (error) => { console.error('Send offer failed: ', error); }
+        );
+        };
+
+        let sendAnswer = () => {
+        console.log('Send answer');
+        pc.createAnswer().then(
+            (answer)=>{
+                console.log(answer)
+                setAndSendLocalDescription(answer)
+            },
+            (error) => { console.error('Send answer failed: ', error); }
+        );
+        };
+
+        let setAndSendLocalDescription = (sessionDescription) => {
+        pc.setLocalDescription(sessionDescription);
+        console.log('Local description set');
+        sendData(sessionDescription);
+        };
+
+        let onIceCandidate = (event) => {
+        if (event.candidate) {
+            console.log('ICE candidate');
+            console.log(event.candidate)
+            sendData({
+            type: 'candidate',
+            candidate: event.candidate
+            });
+        }
+        };
+
+        let onTrack = (event) => {
+        console.log('Add track');
+        remoteStreamElement.srcObject = event.streams[0];
+        };
+
+        let handleSignalingData = (data) => {
+        switch (data.type) {
+            case 'offer':
+            createPeerConnection();
+            console.log(data.Message)
+            pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(data.Message)));
+            sendAnswer();
+            break;
+            case 'answer':
+            console.log(data)
+            pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(data.Message)));
+            break;
+            case 'candidate':
+                // Will need to fix
+            pc.addIceCandidate(new RTCIceCandidate(JSON.parse(data.Message).candidate));
+            break;
+        }
+        };
+
+        let toggleMic = () => {
+        let track = localStream.getAudioTracks()[0];
+        track.enabled = !track.enabled;
+        let micClass = track.enabled ? "unmuted" : "muted";
+        document.getElementById("toggleMic").className = micClass;
+        };
+
+        // Start connection
+        getLocalStream();
+    </script>
+</body>
+</html>
