@@ -1,4 +1,13 @@
-let peerConnection = new RTCPeerConnection()
+
+const configuration = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      // Add more STUN servers as needed
+    ],
+  };
+
+
+let peerConnection = new RTCPeerConnection(configuration)
 
 const socket = new WebSocket("ws://localhost:3000/offer/ws")
 socket.addEventListener('open', function(event){
