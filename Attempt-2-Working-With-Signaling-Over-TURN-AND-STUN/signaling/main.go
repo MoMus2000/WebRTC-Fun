@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
 	"net"
 	"net/http"
 	"sync"
@@ -19,15 +18,13 @@ const (
 )
 
 var (
-	FirstClient    *websocket.Conn
-	SecondClient   *websocket.Conn
-	EncryptedOffer string
-	upgrader       = websocket.Upgrader{
+	upgrader = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
 			return true
 		},
 	}
-	mutex = sync.Mutex{}
+	mutex         = sync.Mutex{}
+	AnswerChannel chan string
 )
 
 type Payload struct {
@@ -41,94 +38,90 @@ type ClientPayload struct {
 }
 
 type Offer struct {
-	Offer string
+	Value string
 }
 
 type IceCandidate struct {
-	IceCandidate string
-}
-
-type Answer struct {
-	Answer string
+	Value string
 }
 
 type Connection struct {
 	Websocket     *websocket.Conn
 	Offer         Offer
 	IceCandidates []IceCandidate
-	Answer        Answer
 }
 
 var ConnectionMapper map[string][]*Connection
 
-func checkIfMapIsFull() {
+func checkIfRoomMapIsFull(key string) {
 	for {
-		if len(ConnectionMapper["DefaultRoom"]) == 2 {
-			time.Sleep(10 * time.Second)
-			fmt.Println("Waiting to send ...")
+		fmt.Println(key)
+		mutex.Lock()
+		length := len(ConnectionMapper[key])
+		mutex.Unlock()
+		if length == 2 {
 			payload := Payload{
 				Action:  "data",
-				Message: ConnectionMapper["DefaultRoom"][0].Offer.Offer,
+				Message: ConnectionMapper[key][0].Offer.Value,
 				Type:    "offer",
 			}
 			b, _ := json.Marshal(payload)
-			fmt.Println(string(b))
-			fmt.Println("BEFORE WRITING ... ", ConnectionMapper["DefaultRoom"][1].Answer)
-			ConnectionMapper["DefaultRoom"][1].Websocket.WriteMessage(websocket.TextMessage, b)
-			time.Sleep(5 * time.Second)
-			fmt.Println("AFTER WRITING ... ", ConnectionMapper["DefaultRoom"][1].Answer)
-			for {
-				// if err != nil {
-				// }
-				// fmt.Println("ANSWER", string(answer))
+			ConnectionMapper[key][1].Websocket.WriteMessage(websocket.TextMessage, b)
+			var ans string
+			ans = <-AnswerChannel
 
+			if ans != "" {
 				payload := Payload{
 					Action:  "data",
-					Message: ConnectionMapper["DefaultRoom"][1].Answer.Answer,
+					Message: ans,
 					Type:    "answer",
 				}
 				b, _ := json.Marshal(payload)
-				ConnectionMapper["DefaultRoom"][0].Websocket.WriteMessage(websocket.TextMessage, b)
-				break
+				ConnectionMapper[key][0].Websocket.WriteMessage(websocket.TextMessage, b)
 			}
 
-			for _, iceCandidate := range ConnectionMapper["DefaultRoom"][0].IceCandidates {
+			// Observation found that a small delay is needed on mobile after sending the webrtc answer
+			time.Sleep(1 * time.Second)
+
+			mutex.Lock()
+			for _, iceCandidate := range ConnectionMapper[key][0].IceCandidates {
 				payload := Payload{
 					Action:  "data",
-					Message: iceCandidate.IceCandidate,
+					Message: iceCandidate.Value,
 					Type:    "candidate",
 				}
 				b, _ := json.Marshal(payload)
-				fmt.Println(string(b))
-				ConnectionMapper["DefaultRoom"][1].Websocket.WriteMessage(websocket.TextMessage, b)
+				ConnectionMapper[key][1].Websocket.WriteMessage(websocket.TextMessage, b)
 			}
-			for _, iceCandidate := range ConnectionMapper["DefaultRoom"][1].IceCandidates {
+			mutex.Unlock()
+
+			mutex.Lock()
+			for _, iceCandidate := range ConnectionMapper[key][1].IceCandidates {
 				payload := Payload{
 					Action:  "data",
-					Message: iceCandidate.IceCandidate,
+					Message: iceCandidate.Value,
 					Type:    "candidate",
 				}
 				b, _ := json.Marshal(payload)
-				fmt.Println(string(b))
-				ConnectionMapper["DefaultRoom"][0].Websocket.WriteMessage(websocket.TextMessage, b)
+				ConnectionMapper[key][0].Websocket.WriteMessage(websocket.TextMessage, b)
 			}
+			mutex.Unlock()
 			break
 		}
 	}
 }
 
-func GuideMessages(conn *websocket.Conn) {
+func GuideMessages(conn *websocket.Conn, roomKey string) {
 	offer := Offer{}
-	randomNumber := rand.Intn(100)
-	fmt.Println(randomNumber)
 	iceCandidates := []IceCandidate{}
 	connection := Connection{}
 	connection.Websocket = conn
-	answer := Answer{}
 
-	ConnectionMapper["DefaultRoom"] = append(ConnectionMapper["DefaultRoom"], &connection)
+	mutex.Lock()
+	ConnectionMapper[roomKey] = append(ConnectionMapper[roomKey], &connection)
+	mutex.Unlock()
 
-	fmt.Println("Number of Connections ", len(ConnectionMapper["DefaultRoom"]))
+	fmt.Println("Number of Connections ", len(ConnectionMapper[roomKey]))
 
 	for {
 		_, Message, err := conn.ReadMessage()
@@ -139,21 +132,22 @@ func GuideMessages(conn *websocket.Conn) {
 		json.Unmarshal(Message, &Type)
 		switch Type.Type {
 		case "offer":
-			offer.Offer = string(Message)
+			offer.Value = string(Message)
+			mutex.Lock()
 			connection.Offer = offer
+			mutex.Unlock()
 		case "candidate":
 			iceCandidates = append(iceCandidates, IceCandidate{string(Message)})
+			mutex.Lock()
 			connection.IceCandidates = append(connection.IceCandidates, IceCandidate{string(Message)})
+			mutex.Unlock()
 		case "answer":
-			fmt.Println("ANSSSWEERR")
-			fmt.Println(string(Message))
-			answer.Answer = string(Message)
-			connection.Answer = answer
+			mutex.Lock()
+			AnswerChannel <- string(Message)
+			mutex.Unlock()
 		}
 	}
 }
-
-var i int
 
 func Gateway(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -163,22 +157,38 @@ func Gateway(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	if i == 0 {
-		data := Payload{Action: "ready", Message: ""}
-		bytes, _ := json.Marshal(data)
+	var roomKey string = ""
+	urlParams := r.URL.Query()
 
-		conn.WriteMessage(websocket.TextMessage, bytes)
+	key, ok := urlParams["roomId"]
+	fmt.Println(urlParams)
 
-		i += 1
+	fmt.Println(key[0])
+
+	if ok {
+		roomKey = key[0]
+	} else {
+		roomKey = "DefaultRoom"
 	}
 
-	GuideMessages(conn)
+	if len(ConnectionMapper[roomKey]) == 0 {
+		data := Payload{Action: "ready", Message: ""}
+		bytes, _ := json.Marshal(data)
+		conn.WriteMessage(websocket.TextMessage, bytes)
+		go checkIfRoomMapIsFull(roomKey)
+	}
+
+	GuideMessages(conn, roomKey)
 }
 
 func main() {
+	AnswerChannel = make(chan string)
 	ConnectionMapper = make(map[string][]*Connection)
-	go checkIfMapIsFull()
+	ConnectionMapper["DefaultRoom"] = make([]*Connection, 0)
+
 	r := mux.NewRouter().StrictSlash(true)
+
+	// provide room ID, otherwise its the default room
 	r.HandleFunc("/ws", Gateway)
 
 	http.ListenAndServe(":9999", r)
